@@ -1,0 +1,212 @@
+[
+  {
+    "id": 1,
+    "status": "completed",
+    "position": [6.5244, 3.3792],
+    "state": "Lagos",
+    "lga": "Ikeja"
+  },
+  {
+    "id": 2,
+    "status": "ongoing",
+    "position": [6.6018, 3.3515],
+    "state": "Lagos",
+    "lga": "Alimosho"
+  },
+  {
+    "id": 3,
+    "status": "completed",
+    "position": [7.3775, 3.947],
+    "state": "Oyo",
+    "lga": "Ibadan North"
+  },
+  {
+    "id": 4,
+    "status": "ongoing",
+    "position": [7.3905, 3.9336],
+    "state": "Oyo",
+    "lga": "Ibadan South-West"
+  },
+  {
+    "id": 5,
+    "status": "completed",
+    "position": [7.1517, 3.3619],
+    "state": "Ogun",
+    "lga": "Abeokuta South"
+  },
+  {
+    "id": 6,
+    "status": "ongoing",
+    "position": [7.16, 3.35],
+    "state": "Ogun",
+    "lga": "Abeokuta North"
+  },
+  {
+    "id": 7,
+    "status": "completed",
+    "position": [6.4654, 7.5139],
+    "state": "Enugu",
+    "lga": "Enugu East"
+  },
+  {
+    "id": 8,
+    "status": "ongoing",
+    "position": [6.4383, 7.513],
+    "state": "Enugu",
+    "lga": "Nsukka"
+  },
+  {
+    "id": 9,
+    "status": "completed",
+    "position": [9.0579, 7.4951],
+    "state": "FCT",
+    "lga": "Abuja Municipal"
+  },
+  {
+    "id": 10,
+    "status": "ongoing",
+    "position": [9.0765, 7.3986],
+    "state": "FCT",
+    "lga": "Bwari"
+  },
+  {
+    "id": 11,
+    "status": "completed",
+    "position": [5.5272, 5.76],
+    "state": "Delta",
+    "lga": "Warri South"
+  },
+  {
+    "id": 12,
+    "status": "ongoing",
+    "position": [5.5028, 5.7766],
+    "state": "Delta",
+    "lga": "Ughelli North"
+  },
+  {
+    "id": 13,
+    "status": "completed",
+    "position": [5.0133, 7.882],
+    "state": "Akwa Ibom",
+    "lga": "Uyo"
+  },
+  {
+    "id": 14,
+    "status": "ongoing",
+    "position": [4.9887, 7.9316],
+    "state": "Akwa Ibom",
+    "lga": "Eket"
+  },
+  {
+    "id": 15,
+    "status": "completed",
+    "position": [10.2906, 11.1677],
+    "state": "Bauchi",
+    "lga": "Bauchi"
+  },
+  {
+    "id": 16,
+    "status": "ongoing",
+    "position": [10.3151, 11.1128],
+    "state": "Bauchi",
+    "lga": "Dass"
+  },
+  {
+    "id": 17,
+    "status": "completed",
+    "position": [11.7471, 11.9634],
+    "state": "Borno",
+    "lga": "Maiduguri"
+  },
+  {
+    "id": 18,
+    "status": "ongoing",
+    "position": [11.8333, 13.15],
+    "state": "Borno",
+    "lga": "Biu"
+  },
+  {
+    "id": 19,
+    "status": "completed",
+    "position": [12.0022, 8.5919],
+    "state": "Kano",
+    "lga": "Kano Municipal"
+  },
+  {
+    "id": 20,
+    "status": "ongoing",
+    "position": [11.9892, 8.528],
+    "state": "Kano",
+    "lga": "Nassarawa"
+  },
+  {
+    "id": 21,
+    "status": "completed",
+    "position": [12.059, 7.4958],
+    "state": "Katsina",
+    "lga": "Katsina"
+  },
+  {
+    "id": 22,
+    "status": "ongoing",
+    "position": [11.7333, 7.8833],
+    "state": "Katsina",
+    "lga": "Funtua"
+  },
+  {
+    "id": 23,
+    "status": "completed",
+    "position": [7.703, 5.3126],
+    "state": "Ekiti",
+    "lga": "Ado-Ekiti"
+  },
+  {
+    "id": 24,
+    "status": "ongoing",
+    "position": [7.6632, 5.2545],
+    "state": "Ekiti",
+    "lga": "Ikere"
+  },
+  {
+    "id": 25,
+    "status": "completed",
+    "position": [6.2105, 7.0742],
+    "state": "Anambra",
+    "lga": "Awka South"
+  },
+  {
+    "id": 26,
+    "status": "ongoing",
+    "position": [6.15, 6.8],
+    "state": "Anambra",
+    "lga": "Onitsha North"
+  },
+  {
+    "id": 27,
+    "status": "completed",
+    "position": [6.4516, 6.0373],
+    "state": "Imo",
+    "lga": "Owerri Municipal"
+  },
+  {
+    "id": 28,
+    "status": "ongoing",
+    "position": [6.5167, 6.1],
+    "state": "Imo",
+    "lga": "Mbaitoli"
+  },
+  {
+    "id": 29,
+    "status": "completed",
+    "position": [8.5, 4.55],
+    "state": "Kwara",
+    "lga": "Ilorin West"
+  },
+  {
+    "id": 30,
+    "status": "ongoing",
+    "position": [8.4833, 4.5167],
+    "state": "Kwara",
+    "lga": "Offa"
+  }
+]

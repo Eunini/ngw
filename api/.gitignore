@@ -1,0 +1,28 @@
+# Dependencies
+node_modules
+
+# Environment variables
+.env
+.env.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Firebase service account
+config/firebase-service-account.json.json
+
+# Uploads
+uploads
+public/reports
+
+# IDE
+.vscode
+.idea
+
+# macOS
+.DS_Store
+
+# Testing
+coverage
