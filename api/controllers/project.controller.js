@@ -1,518 +1,511 @@
 const Project = require('../models/Project.model');
 const User = require('../models/User.model');
 const logger = require('../utils/logger');
-// const { generateProjectId } = require('../utils/generateId');
 const mongoose = require('mongoose');
 
+const {
+  validateStageA,
+  validateStageB1,
+  validateStageB2,
+} = require('../utils/validators');
 
-exports.createProject = async (req, res) => {
-  try {
-    const { name, stageA } = req.body;
+// Helper function for consistent error responses
+const handleError = (res, error, context) => {
+  logger.error(`Error in ${context}: ${error.stack}`);
+  const statusCode = error.statusCode || 500;
+  const message =
+    process.env.NODE_ENV === 'development'
+      ? error.message
+      : `An error occurred during ${context}. Please try again.`;
 
-    if (!name || !stageA) {
-      throw new Error('Project name and stageA data are required');
-    }
+  res.status(statusCode).json({
+    status: 'error',
+    message,
+    ...(process.env.NODE_ENV === 'development' && { stack: error.stack }),
+  });
+};
 
-    // More reliable ID generation
-    const generateIdSegment = () => {
-      return Math.random().toString(36).substring(2, 8)
-        .replace(/[^a-z0-9]/g, '') // Remove special characters
-        .toLowerCase(); // Ensure consistent case
-    };
-
-    const newProject = await Project.create({
-      projectId: `WPRJ-${Date.now()}-${generateIdSegment()}`,
-      name,
-      createdBy: req.user._id,
-      stageA: {
-        projectInfo: stageA.projectInfo || {},
-        site: stageA.site || {},
-        consultant: stageA.consultant || {},
-        geology: stageA.geology || {},
-        accessibility: stageA.accessibility || {},
-      },
-    });
-
-    res.status(201).json({
-      status: 'success',
-      data: {
-        project: newProject,
-      },
-    });
-  } catch (err) {
-    logger.error(`Error creating project: ${err.stack}`);
-    res.status(400).json({
-      status: 'fail',
-      message: process.env.NODE_ENV === 'development' 
-        ? err.message 
-        : 'Failed to create project',
-    });
+// Helper to check project permissions
+const checkProjectPermissions = (project, user) => {
+  if (
+    user.role !== 'admin' &&
+    project.createdBy.toString() !== user._id.toString()
+  ) {
+    const error = new Error('Unauthorized: You do not have permission to access this project');
+    error.statusCode = 403;
+    throw error;
   }
 };
 
-exports.getProject = async (req, res) => {
-  try {
-    const { projectId } = req.params; // Now matches your route parameter
-    
-    // First try finding by projectId (exact match)
-    let project = await Project.findOne({ 
-      projectId: projectId.trim() 
-    }).populate('createdBy', 'name email role');
-
-    if (!project) {
-      return res.status(404).json({
-        status: 'fail',
-        message: 'No project found with that projectId',
-      });
-    }
-
-    // Authorization check
-    if (req.user.role !== 'admin' && project.createdBy._id.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        status: 'fail',
-        message: 'You do not have permission to view this project',
-      });
-    }
-
-    res.status(200).json({
-      status: 'success',
-      data: { project },
-    });
-  } catch (err) {
-    logger.error(`Error getting project: ${err.stack}`);
-    res.status(500).json({
-      status: 'error',
-      message: 'Internal server error',
-    });
-  }
+// Generate a unique project ID (e.g., "WPRJ-2023ABCD-1234")
+const generateProjectId = () => {
+  const timestamp = Date.now().toString(36).toUpperCase();
+  const randomStr = Math.random().toString(36).substring(2, 6).toUpperCase();
+  return `WPRJ-${timestamp}-${randomStr}`;
 };
 
-exports.getAllProjects = async (req, res) => {
-  try {
-    // Filtering
-    const queryObj = { ...req.query };
-    const excludedFields = ['page', 'sort', 'limit', 'fields'];
-    excludedFields.forEach(el => delete queryObj[el]);
+const projectController = {
+  /**
+   * @desc    Create a new project
+   * @route   POST /api/v1/projects
+   * @access  Private
+   */
+  createProject: async (req, res) => {
+    try {
+      const { name, client } = req.body;
 
-    // Advanced filtering
-    let queryStr = JSON.stringify(queryObj);
-    queryStr = queryStr.replace(/\b(gte|gt|lte|lt)\b/g, match => `$${match}`);
-    
-    let query = Project.find(JSON.parse(queryStr));
-
-    // If not admin, only show user's projects
-    if (req.user.role !== 'admin') {
-      query = query.where('createdBy').equals(req.user._id);
-    }
-
-    // Sorting
-    if (req.query.sort) {
-      const sortBy = req.query.sort.split(',').join(' ');
-      query = query.sort(sortBy);
-    } else {
-      query = query.sort('-createdAt');
-    }
-
-    // Field limiting
-    if (req.query.fields) {
-      const fields = req.query.fields.split(',').join(' ');
-      query = query.select(fields);
-    } else {
-      query = query.select('-__v');
-    }
-
-    // Pagination
-    const page = req.query.page * 1 || 1;
-    const limit = req.query.limit * 1 || 100;
-    const skip = (page - 1) * limit;
-
-    query = query.skip(skip).limit(limit);
-
-    const projects = await query;
-
-    res.status(200).json({
-      status: 'success',
-      results: projects.length,
-      data: {
-        projects,
-      },
-    });
-  } catch (err) {
-    logger.error(`Error getting all projects: ${err.message}`);
-    res.status(400).json({
-      status: 'fail',
-      message: err.message,
-    });
-  }
-};
-
-exports.updateProject = async (req, res) => {
-  try {
-    const { projectId } = req.params; // Changed from id to projectId
-    const cleanProjectId = projectId.trim();
-
-    // Find project by projectId first
-    let project = await Project.findOne({ projectId: cleanProjectId });
-
-    if (!project) {
-      return res.status(404).json({
-        status: 'fail',
-        message: 'No project found with that projectId',
-      });
-    }
-
-    // Check permissions
-    if (req.user.role !== 'admin' && project.createdBy.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        status: 'fail',
-        message: 'You do not have permission to update this project',
-      });
-    }
-
-    // Update by projectId
-    const updatedProject = await Project.findOneAndUpdate(
-      { projectId: cleanProjectId },
-      req.body,
-      {
-        new: true,
-        runValidators: true,
+      if (!name || !client) {
+        const error = new Error('Project name and client information are required');
+        error.statusCode = 400;
+        throw error;
       }
-    );
 
-    res.status(200).json({
-      status: 'success',
-      data: {
-        project: updatedProject,
-      },
-    });
-  } catch (err) {
-    logger.error(`Error updating project: ${err.stack}`);
-    res.status(400).json({
-      status: 'fail',
-      message: err.message,
-    });
-  }
-};
-exports.deleteProject = async (req, res) => {
-  try {
-    const { projectId } = req.params;
-    const cleanProjectId = projectId.trim();
-
-    // Find project by projectId first
-    const project = await Project.findOne({ projectId: cleanProjectId });
-
-    if (!project) {
-      return res.status(404).json({
-        status: 'fail',
-        message: 'No project found with that projectId',
+      const newProject = await Project.create({
+        projectId: generateProjectId(),
+        name,
+        client,
+        createdBy: req.user._id,
+        status: 'draft',
+        currentStage: 'A',
       });
+
+      res.status(201).json({
+        status: 'success',
+        data: {
+          project: newProject,
+        },
+      });
+    } catch (err) {
+      handleError(res, err, 'project creation');
     }
+  },
 
-    // Check permissions
-    if (req.user.role !== 'admin' && project.createdBy.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        status: 'fail',
-        message: 'You do not have permission to delete this project',
-      });
-    }
+  /**
+   * @desc    Get a single project by ID
+   * @route   GET /api/v1/projects/:projectId
+   * @access  Private
+   */
+  getProject: async (req, res) => {
+    try {
+      const { projectId } = req.params;
 
-    // Delete the project
-    await Project.findOneAndDelete({ projectId: cleanProjectId });
+      const project = await Project.findOne({ projectId: projectId.trim() })
+        .populate('createdBy', 'name email role')
+        .populate('stageB.approvingGeologist', 'name licenseNumber');
 
-    res.status(204).json({
-      status: 'success',
-      data: null,
-    });
-  } catch (err) {
-    logger.error(`Error deleting project: ${err.stack}`);
-    res.status(500).json({
-      status: 'error',
-      message: 'Internal server error while deleting project',
-    });
-  }
-};
-//   try {
-//     const { projectId } = req.params; // Changed from id to projectId
-//     const cleanProjectId = projectId.trim();
-
-//     // Find project by projectId first
-//     let project = await Project.findOne({ projectId: cleanProjectId });
-
-//     if (!project) {
-//       return res.status(404).json({
-//         status: 'fail',
-//         message: 'No project found with that projectId',
-//       });
-//     }
-
-//     // Check permissions
-//     if (req.user.role !== 'admin' && project.createdBy.toString() !== req.user._id.toString()) {
-//       return res.status(403).json({
-//         status: 'fail',
-//         message: 'You do not have permission to update this project',
-//       });
-//     }
-
-//     // Update by projectId
-//     const updatedProject = await Project.findOneAndUpdate(
-//       { projectId: cleanProjectId },
-//       req.body,
-//       {
-//         new: true,
-//         runValidators: true,
-//       }
-//     );
-
-//     res.status(200).json({
-//       status: 'success',
-//       data: {
-//         project: updatedProject,
-//       },
-//     });
-//   } catch (err) {
-//     logger.error(`Error updating project: ${err.stack}`);
-//     res.status(400).json({
-//       status: 'fail',
-//       message: err.message,
-//     });
-//   }
-// };
-
-exports.completeStageA = async (req, res) => {
-  try {
-    const project = await Project.findById(req.params.id);
-
-    if (!project) {
-      return res.status(404).json({
-        status: 'fail',
-        message: 'No project found with that ID',
-      });
-    }
-
-    // Check if user has permission
-    if (req.user.role !== 'admin' && project.createdBy.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        status: 'fail',
-        message: 'You do not have permission to update this project',
-      });
-    }
-
-    // Update stage A
-    project.stageA = {
-      ...project.stageA,
-      ...req.body,
-      completed: true,
-      completedAt: Date.now(),
-    };
-
-    await project.save();
-
-    res.status(200).json({
-      status: 'success',
-      data: {
-        project,
-      },
-    });
-  } catch (err) {
-    logger.error(`Error completing stage A: ${err.message}`);
-    res.status(400).json({
-      status: 'fail',
-      message: err.message,
-    });
-  }
-};
-
-exports.completeStageB = async (req, res) => {
-  try {
-    const project = await Project.findById(req.params.id);
-
-    if (!project) {
-      return res.status(404).json({
-        status: 'fail',
-        message: 'No project found with that ID',
-      });
-    }
-
-    // Check if user has permission
-    if (req.user.role !== 'admin' && project.createdBy.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        status: 'fail',
-        message: 'You do not have permission to update this project',
-      });
-    }
-
-    // Check if stage A is completed
-    if (!project.stageA.completed) {
-      return res.status(400).json({
-        status: 'fail',
-        message: 'Stage A must be completed before proceeding to Stage B',
-      });
-    }
-
-    // Verify geologist license if provided
-    if (req.body.approvingGeologist && req.body.approvingGeologist.licenseNumber) {
-      const geologist = await User.findOne({
-        licenseNumber: req.body.approvingGeologist.licenseNumber,
-        role: 'hydrogeologist',
-      });
-
-      if (!geologist) {
-        return res.status(400).json({
-          status: 'fail',
-          message: 'Approving geologist license number is not valid',
-        });
+      if (!project) {
+        const error = new Error('Project not found');
+        error.statusCode = 404;
+        throw error;
       }
-    }
 
-    // Update stage B
-    project.stageB = {
-      ...project.stageB,
-      ...req.body,
-      completed: true,
-      completedAt: Date.now(),
-    };
+      checkProjectPermissions(project, req.user);
 
-    await project.save();
-
-    res.status(200).json({
-      status: 'success',
-      data: {
-        project,
-      },
-    });
-  } catch (err) {
-    logger.error(`Error completing stage B: ${err.message}`);
-    res.status(400).json({
-      status: 'fail',
-      message: err.message,
-    });
-  }
-};
-
-exports.completeStageC = async (req, res) => {
-  try {
-    const project = await Project.findById(req.params.id);
-
-    if (!project) {
-      return res.status(404).json({
-        status: 'fail',
-        message: 'No project found with that ID',
+      res.status(200).json({
+        status: 'success',
+        data: { project },
       });
+    } catch (err) {
+      handleError(res, err, 'fetching project');
     }
+  },
 
-    // Check if user has permission
-    if (req.user.role !== 'admin' && project.createdBy.toString() !== req.user._id.toString()) {
-      return res.status(403).json({
-        status: 'fail',
-        message: 'You do not have permission to update this project',
+  /**
+   * @desc    Get all projects (with filtering, sorting, pagination)
+   * @route   GET /api/v1/projects
+   * @access  Private
+   */
+  getAllProjects: async (req, res) => {
+    try {
+      // 1) Filtering
+      const filter = {};
+      if (req.user.role !== 'admin') {
+        filter.createdBy = req.user._id;
+      }
+      if (req.query.status) {
+        filter.status = req.query.status;
+      }
+      if (req.query.stage) {
+        filter.currentStage = req.query.stage.toUpperCase();
+      }
+
+      // 2) Sorting
+      const sortBy = req.query.sort || '-createdAt';
+
+      // 3) Pagination
+      const page = parseInt(req.query.page, 10) || 1;
+      const limit = parseInt(req.query.limit, 10) || 20;
+      const skip = (page - 1) * limit;
+
+      // Execute query
+      const projects = await Project.find(filter)
+        .sort(sortBy)
+        .skip(skip)
+        .limit(limit)
+        .populate('createdBy', 'name email');
+
+      const totalProjects = await Project.countDocuments(filter);
+
+      res.status(200).json({
+        status: 'success',
+        results: projects.length,
+        pagination: {
+          page,
+          limit,
+          total: totalProjects,
+          pages: Math.ceil(totalProjects / limit),
+        },
+        data: { projects },
       });
+    } catch (err) {
+      handleError(res, err, 'fetching projects');
     }
+  },
 
-    // Check if stage B is completed
-    if (!project.stageB.completed) {
-      return res.status(400).json({
-        status: 'fail',
-        message: 'Stage B must be completed before proceeding to Stage C',
+  /**
+   * @desc    Update project basic info (name, client)
+   * @route   PATCH /api/v1/projects/:projectId
+   * @access  Private
+   */
+  updateProjectBasicInfo: async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      const { name, client } = req.body;
+
+      const project = await Project.findOne({ projectId: projectId.trim() });
+      if (!project) {
+        const error = new Error('Project not found');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      checkProjectPermissions(project, req.user);
+
+      // Only allow updates in draft status
+      if (project.status !== 'draft') {
+        const error = new Error('Project can only be updated in draft status');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      // Update fields if provided
+      if (name) project.name = name;
+      if (client) project.client = client;
+
+      await project.save();
+
+      res.status(200).json({
+        status: 'success',
+        data: { project },
       });
+    } catch (err) {
+      handleError(res, err, 'updating project');
     }
+  },
 
-    // Update stage C
-    project.stageC = {
-      waterQuality: req.body.waterQuality,
-      recommendation: req.body.recommendation,
-      completed: true,
-      completedAt: Date.now(),
-    };
+  /**
+   * @desc    Submit Stage A data
+   * @route   POST /api/v1/projects/:projectId/stage-a
+   * @access  Private
+   */
+  submitStageA: async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      const stageAData = req.body;
 
-    // Mark project as completed if all stages are done
-    if (project.stageA.completed && project.stageB.completed && project.stageC.completed) {
-      project.status = 'completed';
+      // Validate input
+      const validationError = validateStageA(stageAData);
+      if (validationError) {
+        validationError.statusCode = 400;
+        throw validationError;
+      }
+
+      const project = await Project.findOne({ projectId: projectId.trim() });
+      if (!project) {
+        const error = new Error('Project not found');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      checkProjectPermissions(project, req.user);
+
+      // Update stage A data
+      project.stageA = {
+        ...stageAData,
+        submittedAt: new Date(),
+        submittedBy: req.user._id,
+        completed: true,
+        completedAt: new Date(),
+      };
+
+      project.currentStage = 'B'; // Move to next stage
+      await project.save();
+
+      res.status(200).json({
+        status: 'success',
+        data: { project },
+      });
+    } catch (err) {
+      handleError(res, err, 'submitting Stage A');
     }
+  },
 
-    await project.save();
+  /**
+   * @desc    Submit Stage B1 data
+   * @route   POST /api/v1/projects/:projectId/stage-b1
+   * @access  Private
+   */
+  submitStageB1: async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      const stageB1Data = req.body;
 
-    res.status(200).json({
-      status: 'success',
-      data: {
-        project,
-      },
-    });
-  } catch (err) {
-    logger.error(`Error completing stage C: ${err.message}`);
-    res.status(400).json({
-      status: 'fail',
-      message: err.message,
-    });
-  }
-};
+      // Validate input
+      const validationError = validateStageB1(stageB1Data);
+      if (validationError) {
+        validationError.statusCode = 400;
+        throw validationError;
+      }
 
-exports.getProjectStats = async (req, res) => {
-  try {
-    const stats = await Project.aggregate([
-      {
-        $match: { createdBy: mongoose.Types.ObjectId(req.user._id) }
-      },
-      {
-        $group: {
-          _id: '$status',
-          numProjects: { $sum: 1 },
-          avgBudget: { $avg: '$stageA.projectInfo.budget' },
-          minBudget: { $min: '$stageA.projectInfo.budget' },
-          maxBudget: { $max: '$stageA.projectInfo.budget' }
+      const project = await Project.findOne({ projectId: projectId.trim() });
+      if (!project) {
+        const error = new Error('Project not found');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      checkProjectPermissions(project, req.user);
+
+      // Verify Stage A is completed
+      if (!project.stageA?.completed) {
+        const error = new Error('Stage A must be completed before submitting Stage B1');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      // Update stage B1 data
+      project.stageB = project.stageB || {};
+      project.stageB.drilling = {
+        ...stageB1Data,
+        submittedAt: new Date(),
+        submittedBy: req.user._id,
+        completed: true,
+        completedAt: new Date(),
+      };
+
+      await project.save();
+
+      res.status(200).json({
+        status: 'success',
+        data: { project },
+      });
+    } catch (err) {
+      handleError(res, err, 'submitting Stage B1');
+    }
+  },
+
+  /**
+   * @desc    Submit Stage B2 data
+   * @route   POST /api/v1/projects/:projectId/stage-b2
+   * @access  Private
+   */
+  submitStageB2: async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      const stageB2Data = req.body;
+
+      // Validate input
+      const validationError = validateStageB2(stageB2Data);
+      if (validationError) {
+        validationError.statusCode = 400;
+        throw validationError;
+      }
+
+      const project = await Project.findOne({ projectId: projectId.trim() });
+      if (!project) {
+        const error = new Error('Project not found');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      checkProjectPermissions(project, req.user);
+
+      // Verify Stage B1 is completed
+      if (!project.stageB?.drilling?.completed) {
+        const error = new Error('Stage B1 must be completed before submitting Stage B2');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      // Update stage B2 data
+      project.stageB.installation = {
+        ...stageB2Data,
+        submittedAt: new Date(),
+        submittedBy: req.user._id,
+        completed: true,
+        completedAt: new Date(),
+      };
+
+      project.stageB.completed = true;
+      project.currentStage = 'C'; // Move to next stage
+      await project.save();
+
+      res.status(200).json({
+        status: 'success',
+        data: { project },
+      });
+    } catch (err) {
+      handleError(res, err, 'submitting Stage B2');
+    }
+  },
+
+  /**
+   * @desc    Approve a project stage (Admin only)
+   * @route   POST /api/v1/projects/:projectId/approve/:stage
+   * @access  Private (Admin)
+   */
+  approveStage: async (req, res) => {
+    try {
+      const { projectId, stage } = req.params;
+      const { approved, comments } = req.body;
+
+      if (typeof approved !== 'boolean') {
+        const error = new Error('Approval status must be a boolean');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      const project = await Project.findOne({ projectId: projectId.trim() });
+      if (!project) {
+        const error = new Error('Project not found');
+        error.statusCode = 404;
+        throw error;
+      }
+
+      // Only admin can approve stages
+      if (req.user.role !== 'admin') {
+        const error = new Error('Only administrators can approve stages');
+        error.statusCode = 403;
+        throw error;
+      }
+
+      const stageUpper = stage.toUpperCase();
+      const stagePath = `stage${stageUpper}`;
+
+      // Validate stage exists
+      if (!project[stagePath]) {
+        const error = new Error(`Stage ${stageUpper} data not submitted yet`);
+        error.statusCode = 400;
+        throw error;
+      }
+
+      // Update approval status
+      project[stagePath].approved = approved;
+      project[stagePath].approvedAt = new Date();
+      project[stagePath].approvedBy = req.user._id;
+      project[stagePath].comments = comments;
+
+      if (approved) {
+        // Move to next stage if approved
+        const nextStage = String.fromCharCode(stageUpper.charCodeAt(0) + 1);
+        project.currentStage = nextStage;
+      } else {
+        // Mark as rejected if not approved
+        project.status = 'rejected';
+        if (stageUpper === 'B') {
+          project.stageB.failed = true;
         }
-      },
-      {
-        $sort: { numProjects: -1 }
       }
-    ]);
 
-    res.status(200).json({
-      status: 'success',
-      data: {
-        stats
-      }
-    });
-  } catch (err) {
-    logger.error(`Error getting project stats: ${err.message}`);
-    res.status(400).json({
-      status: 'fail',
-      message: err.message
-    });
-  }
-};
+      await project.save();
 
-exports.getProjectsWithin = async (req, res) => {
-  try {
-    const { distance, latlng, unit } = req.params;
-    const [lat, lng] = latlng.split(',');
-
-    const radius = unit === 'mi' ? distance / 3963.2 : distance / 6378.1;
-
-    if (!lat || !lng) {
-      return res.status(400).json({
-        status: 'fail',
-        message: 'Please provide latitude and longitude in the format lat,lng'
+      res.status(200).json({
+        status: 'success',
+        data: { project },
       });
+    } catch (err) {
+      handleError(res, err, 'approving stage');
     }
+  },
 
-    const projects = await Project.find({
-      'stageA.site.coordinates': {
-        $geoWithin: { $centerSphere: [[lng, lat], radius] }
-      }
-    });
+  /**
+   * @desc    Delete a project
+   * @route   DELETE /api/v1/projects/:projectId
+   * @access  Private
+   */
+  deleteProject: async (req, res) => {
+    try {
+      const { projectId } = req.params;
 
-    res.status(200).json({
-      status: 'success',
-      results: projects.length,
-      data: {
-        projects
+      const project = await Project.findOne({ projectId: projectId.trim() });
+      if (!project) {
+        const error = new Error('Project not found');
+        error.statusCode = 404;
+        throw error;
       }
-    });
-  } catch (err) {
-    logger.error(`Error getting projects within radius: ${err.message}`);
-    res.status(400).json({
-      status: 'fail',
-      message: err.message
-    });
+
+      checkProjectPermissions(project, req.user);
+
+      // Only allow deletion in draft or rejected status
+      if (!['draft', 'rejected'].includes(project.status)) {
+        const error = new Error('Only draft or rejected projects can be deleted');
+        error.statusCode = 400;
+        throw error;
+      }
+
+      await Project.deleteOne({ projectId: projectId.trim() });
+
+      res.status(204).json({
+        status: 'success',
+        data: null,
+      });
+    } catch (err) {
+      handleError(res, err, 'deleting project');
+    }
+  },
+
+  /**
+   * @desc    Get project statistics
+   * @route   GET /api/v1/projects/stats
+   * @access  Private
+   */
+  getProjectStats: async (req, res) => {
+    try {
+      const matchCriteria = req.user.role === 'admin' ? {} : { createdBy: req.user._id };
+
+      const stats = await Project.aggregate([
+        { $match: matchCriteria },
+        {
+          $group: {
+            _id: '$status',
+            count: { $sum: 1 },
+            stages: {
+              $push: {
+                stage: '$currentStage',
+                projectId: '$projectId',
+              },
+            },
+          },
+        },
+        {
+          $project: {
+            status: '$_id',
+            count: 1,
+            stages: 1,
+            _id: 0,
+          },
+        },
+        { $sort: { count: -1 } },
+      ]);
+
+      res.status(200).json({
+        status: 'success',
+        data: { stats },
+      });
+    } catch (err) {
+      handleError(res, err, 'fetching project statistics');
+    }
   }
 };
+
+module.exports = projectController;
